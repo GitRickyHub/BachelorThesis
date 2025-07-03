@@ -1,0 +1,80 @@
+Sub ExportInterviews()
+    Dim ws As Worksheet
+    Dim startRow As Long, lastRow As Long, i As Long
+    Dim email As String, filename As String
+    Dim pdfPath As String, folderPath As String
+    Dim fso As Object, fileExists As Boolean
+    Dim noEmailCounter As Long
+    Dim content As String
+    Dim wordApp As Object, doc As Object
+    Dim txtFile As Object, txtFilename As String
+
+    Set ws = ThisWorkbook.Sheets("Rohdaten")
+    Set fso = CreateObject("Scripting.FileSystemObject")
+
+    folderPath = Environ("USERPROFILE") & "\Desktop\interviews\"
+    If Dir(folderPath, vbDirectory) = "" Then
+        MkDir folderPath
+    End If
+
+    startRow = 1
+    Do While ws.Cells(startRow, 1).Value <> "t_1" And startRow < 100
+        startRow = startRow + 1
+    Loop
+    If startRow = 100 Then
+        MsgBox "Start marker 't_1' not found."
+        Exit Sub
+    End If
+
+    lastRow = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row
+    noEmailCounter = 1
+
+    Set wordApp = CreateObject("Word.Application")
+    wordApp.Visible = False
+
+    For i = startRow To lastRow
+        content = ""
+        email = Trim(ws.Cells(i, 3).Value)
+
+        content = ws.Cells(i, 4).Value & vbCrLf & _
+                  ws.Cells(i, 5).Value & vbCrLf & _
+                  ws.Cells(i, 6).Value
+
+        If email <> "" Then
+            filename = email
+        Else
+            Do
+                filename = "noemail" & noEmailCounter
+                noEmailCounter = noEmailCounter + 1
+            Loop While fso.fileExists(folderPath & filename & ".pdf")
+        End If
+
+        ' Generate PDF
+        Set doc = wordApp.Documents.Add
+        doc.Content.Text = content
+        doc.SaveAs2 folderPath & filename & ".docx", FileFormat:=12
+        doc.ExportAsFixedFormat OutputFileName:=folderPath & filename & ".pdf", _
+                                 ExportFormat:=17
+        doc.Close False
+
+        ' Generate TXT
+        Set txtFile = fso.CreateTextFile(folderPath & filename & ".txt", True, False)
+        txtFile.Write content
+        txtFile.Close
+    Next i
+
+    wordApp.Quit
+    Set wordApp = Nothing
+
+    ' Cleanup .docx files
+    Dim file As Object
+    For Each file In fso.GetFolder(folderPath).Files
+        If LCase(fso.GetExtensionName(file.Name)) = "docx" Then
+            On Error Resume Next
+            file.Delete True
+            On Error GoTo 0
+        End If
+    Next file
+
+    MsgBox "Export complete: PDF and TXT files saved."
+End Sub
